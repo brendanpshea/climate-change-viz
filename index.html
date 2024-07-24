@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Temperature Anomaly Narrative Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        #visualization {
+            width: 100%;
+            max-width: 960px;
+            height: 500px;
+            margin: 0 auto;
+        }
+        .line {
+            fill: none;
+            stroke: steelblue;
+            stroke-width: 2px;
+        }
+        .el-nino {
+            fill: red;
+            opacity: 0.5;
+        }
+        .la-nina {
+            fill: blue;
+            opacity: 0.5;
+        }
+        .trend-line {
+            stroke: green;
+            stroke-width: 2px;
+            stroke-dasharray: 5,5;
+        }
+        .tooltip {
+            position: absolute;
+            background: white;
+            border: 1px solid #ccc;
+            padding: 5px;
+            font-size: 12px;
+        }
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+        button {
+            margin: 0 5px;
+        }
+        .point {
+            fill: steelblue;
+            stroke: white;
+        }
+        .toggle-controls {
+            margin-top: 10px;
+        }
+        .toggle-controls label {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="title">Temperature Anomaly Narrative Visualization</h1>
+    <p id="description"></p>
+    <div id="visualization"></div>
+    <div class="controls">
+        <button id="prevBtn">Previous</button>
+        <button id="nextBtn">Next</button>
+        <button id="clearFilterBtn" style="display: none;">Clear Filter</button>
+        <div class="toggle-controls" style="display: none;">
+            <label><input type="checkbox" id="elNinoToggle"> Show El Niño Years</label>
+            <label><input type="checkbox" id="laNinaToggle"> Show La Niña Years</label>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let data;
+        let currentScene = 0;
+        const margin = {top: 20, right: 30, bottom: 30, left: 60};
+        const width = 960 - margin.left - margin.right;
+        const height = 500 - margin.top - margin.bottom;
+        
+        const x = d3.scaleTime().range([0, width]);
+        const y = d3.scaleLinear().range([height, 0]);
+        
+        const svg = d3.select("#visualization")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+        
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        const scenes = [
+            {
+                title: "Introduction to Global Temperature Anomalies",
+                description: "This visualization presents global land and ocean temperature anomalies from 1850 to 2024. Temperature anomalies show how much warmer or cooler a period is compared to the long-term average. Positive anomalies indicate temperatures above the average, while negative anomalies indicate temperatures below the average.",
+                render: renderBaseVisualization
+            },
+            {
+                title: "El Niño Effect on Global Temperatures",
+                description: "El Niño is a climate pattern characterized by unusually warm ocean temperatures in the equatorial Pacific. During El Niño years (highlighted in red), we often see a short-term increase in global temperatures. This visualization shows how El Niño events correlate with temperature anomalies.",
+                render: renderElNino
+            },
+            {
+                title: "La Niña Effect on Global Temperatures",
+                description: "La Niña is the opposite of El Niño, characterized by unusually cool ocean temperatures in the equatorial Pacific. During La Niña years (highlighted in blue), we often see a short-term decrease in global temperatures. This visualization demonstrates how La Niña events correlate with temperature anomalies.",
+                render: renderLaNina
+            },
+            {
+                title: "Evidence of Long-term Climate Change",
+                description: "While El Niño and La Niña cause short-term fluctuations, the long-term trend (shown by the green line) reveals a clear increase in global temperatures over time. This upward trend is a key indicator of global climate change, showing that the Earth is warming despite year-to-year variations.",
+                render: renderClimateTrend
+            },
+            {
+                title: "Explore the Data",
+                description: "In this interactive scene, you can explore the data in detail. Use your mouse to drag and select a time period to zoom in. Toggle the checkboxes to show or hide El Niño and La Niña years. This allows you to examine specific periods and events in closer detail, and see how they relate to the overall warming trend.",
+                render: renderInteractive
+            }
+        ];
+
+        // Load and process data
+        d3.csv("data.csv").then(function(loadedData) {
+            data = loadedData.map(d => ({
+                year: d3.timeParse("%Y")(d.Year),
+                anomaly: +d.Anomaly,
+                el_nino: +d.El_Nino,
+                la_nina: +d.La_Nina
+            }));
+            
+            x.domain(d3.extent(data, d => d.year));
+            y.domain(d3.extent(data, d => d.anomaly));
+            
+            updateScene();
+        });
+
+        function renderBaseVisualization() {
+            svg.selectAll("*").remove();
+            
+            svg.append("g")
+                .attr("class", "x-axis")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x));
+            
+            svg.append("g")
+                .attr("class", "y-axis")
+                .call(d3.axisLeft(y));
+            
+            svg.append("path")
+                .datum(data)
+                .attr("class", "line")
+                .attr("d", d3.line()
+                    .x(d => x(d.year))
+                    .y(d => y(d.anomaly))
+                );
+            
+            svg.append("text")
+                .attr("transform", `translate(${width/2},${height + margin.top + 20})`)
+                .style("text-anchor", "middle")
+                .text("Year");
+            
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .text("Temperature Anomaly (°C)");
+
+            svg.selectAll(".point")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "point")
+                .attr("cx", d => x(d.year))
+                .attr("cy", d => y(d.anomaly))
+                .attr("r", 3)
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`Year: ${d3.timeFormat("%Y")(d.year)}<br/>
+                                  Anomaly: ${d.anomaly.toFixed(2)}°C<br/>
+                                  ${d.el_nino ? 'El Niño' : d.la_nina ? 'La Niña' : 'Normal'} year`)
+                        .style("left", (event.pageX + 5) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+        }
+
+        function renderElNino() {
+            renderBaseVisualization();
+            renderElNinoRects();
+            
+            svg.append("text")
+                .attr("x", width - 100)
+                .attr("y", 50)
+                .attr("class", "annotation")
+                .text("El Niño years")
+                .attr("fill", "red");
+        }
+
+        function renderLaNina() {
+            renderBaseVisualization();
+            renderLaNinaRects();
+            
+            svg.append("text")
+                .attr("x", width - 100)
+                .attr("y", 50)
+                .attr("class", "annotation")
+                .text("La Niña years")
+                .attr("fill", "blue");
+        }
+
+        function renderElNinoRects() {
+            svg.selectAll(".el-nino")
+                .data(data.filter(d => d.el_nino === 1))
+                .enter()
+                .append("rect")
+                .attr("class", "el-nino")
+                .attr("x", d => x(d.year))
+                .attr("y", 0)
+                .attr("width", width / data.length)
+                .attr("height", height);
+        }
+
+        function renderLaNinaRects() {
+            svg.selectAll(".la-nina")
+                .data(data.filter(d => d.la_nina === 1))
+                .enter()
+                .append("rect")
+                .attr("class", "la-nina")
+                .attr("x", d => x(d.year))
+                .attr("y", 0)
+                .attr("width", width / data.length)
+                .attr("height", height);
+        }
+
+        function calculateTrendLine(data) {
+            const xMean = d3.mean(data, d => d.year.getTime());
+            const yMean = d3.mean(data, d => d.anomaly);
+            
+            const ssxx = d3.sum(data, d => Math.pow(d.year.getTime() - xMean, 2));
+            const ssxy = d3.sum(data, d => (d.year.getTime() - xMean) * (d.anomaly - yMean));
+            
+            const slope = ssxy / ssxx;
+            const intercept = yMean - slope * xMean;
+            
+            return [
+                {year: new Date(d3.min(data, d => d.year)), anomaly: slope * d3.min(data, d => d.year.getTime()) + intercept},
+                {year: new Date(d3.max(data, d => d.year)), anomaly: slope * d3.max(data, d => d.year.getTime()) + intercept}
+            ];
+        }
+
+        function renderTrendLine() {
+            const trendData = calculateTrendLine(data);
+            
+            svg.append("path")
+                .datum(trendData)
+                .attr("class", "trend-line")
+                .attr("d", d3.line()
+                    .x(d => x(d.year))
+                    .y(d => y(d.anomaly))
+                );
+            
+            svg.append("text")
+                .attr("x", width - 150)
+                .attr("y", height - 20)
+                .attr("class", "annotation")
+                .text("Long-term warming trend")
+                .attr("fill", "green");
+        }
+
+        function renderClimateTrend() {
+            renderBaseVisualization();
+            renderTrendLine();
+        }
+
+        function renderInteractive() {
+            renderBaseVisualization();
+            renderTrendLine();
+            
+            const brush = d3.brushX()
+                .extent([[0, 0], [width, height]])
+                .on("end", brushed);
+            
+            svg.append("g")
+                .attr("class", "brush")
+                .call(brush);
+            
+            function brushed(event) {
+                if (!event.selection) return;
+                const [x0, x1] = event.selection.map(x.invert);
+                x.domain([x0, x1]);
+                updateChart();
+            }
+            
+            svg.append("text")
+                .attr("x", 10)
+                .attr("y", 20)
+                .attr("class", "annotation")
+                .text("Drag to zoom into a time period")
+                .attr("fill", "black");
+
+            d3.select("#clearFilterBtn").style("display", "inline-block");
+            d3.select(".toggle-controls").style("display", "block");
+        }
+
+        function updateChart() {
+            svg.select(".x-axis").call(d3.axisBottom(x));
+            svg.select(".line")
+                .attr("d", d3.line()
+                    .x(d => x(d.year))
+                    .y(d => y(d.anomaly))
+                );
+            svg.selectAll(".point")
+                .attr("cx", d => x(d.year))
+                .attr("cy", d => y(d.anomaly));
+            
+            // Update trend line
+            const visibleData = data.filter(d => d.year >= x.domain()[0] && d.year <= x.domain()[1]);
+            const trendData = calculateTrendLine(visibleData);
+            
+            svg.select(".trend-line")
+                .datum(trendData)
+                .attr("d", d3.line()
+                    .x(d => x(d.year))
+                    .y(d => y(d.anomaly))
+                );
+
+            // Update El Niño and La Niña rects
+            updateElNinoLaNina();
+        }
+
+        function updateElNinoLaNina() {
+            svg.selectAll(".el-nino").remove();
+            svg.selectAll(".la-nina").remove();
+
+            if (currentScene === 1 || (currentScene === 4 && d3.select("#elNinoToggle").property("checked"))) {
+                renderElNinoRects();
+            }
+            if (currentScene === 2 || (currentScene === 4 && d3.select("#laNinaToggle").property("checked"))) {
+                renderLaNinaRects();
+            }
+        }
+
+        function clearFilter() {
+            x.domain(d3.extent(data, d => d.year));
+            updateChart();
+            svg.select(".brush").call(d3.brush().clear);
+        }
+
+        function updateScene() {
+            const scene = scenes[currentScene];
+            d3.select("#title").text(scene.title);
+            d3.select("#description").text(scene.description);
+            
+            // Clear filter before rendering new scene
+            clearFilter();
+            
+            scene.render();
+
+            // Update button visibility
+            d3.select("#prevBtn").style("display", currentScene === 0 ? "none" : "inline-block");
+            d3.select("#nextBtn").style("display", currentScene === scenes.length - 1 ? "none" : "inline-block");
+            d3.select("#clearFilterBtn").style("display", currentScene === scenes.length - 1 ? "inline-block" : "none");
+            d3.select(".toggle-controls").style("display", currentScene === scenes.length - 1 ? "block" : "none");
+
+            // Reset toggle checkboxes
+            d3.select("#elNinoToggle").property("checked", false);
+            d3.select("#laNinaToggle").property("checked", false);
+        }
+
+        d3.select("#prevBtn").on("click", () => {
+            if (currentScene > 0) {
+                currentScene--;
+                updateScene();
+            }
+        });
+
+        d3.select("#nextBtn").on("click", () => {
+            if (currentScene < scenes.length - 1) {
+                currentScene++;
+                updateScene();
+            }
+        });
+
+        d3.select("#clearFilterBtn").on("click", clearFilter);
+
+        d3.select("#elNinoToggle").on("change", updateElNinoLaNina);
+        d3.select("#laNinaToggle").on("change", updateElNinoLaNina);
+    </script>
+</body>
+</html>
